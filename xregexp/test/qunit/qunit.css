@@ -1,14 +1,14 @@
 /**
- * QUnit v1.2.0 - A JavaScript Unit Testing Framework
+ * qunit v1.3.0 - a javascript unit testing framework
  *
  * http://docs.jquery.com/QUnit
  *
- * Copyright (c) 2011 John Resig, J�rn Zaefferer
- * Dual licensed under the MIT (MIT-LICENSE.txt)
- * or GPL (GPL-LICENSE.txt) licenses.
+ * copyright (c) 2012 john resig, jörn zaefferer
+ * dual licensed under the mit (mit-license.txt)
+ * or gpl (gpl-license.txt) licenses.
  */
 
-/** Font Family and Sizes */
+/** família da fonte e tamanhos */
 
 #qunit-tests, #qunit-header, #qunit-banner, #qunit-testrunner-toolbar, #qunit-userAgent, #qunit-testresult {
 	font-family: "Helvetica Neue Light", "HelveticaNeue-Light", "Helvetica Neue", Calibri, Helvetica, Arial, sans-serif;
@@ -18,7 +18,7 @@
 #qunit-tests { font-size: smaller; }
 
 
-/** Resets */
+/** resets */
 
 #qunit-tests, #qunit-tests ol, #qunit-header, #qunit-banner, #qunit-userAgent, #qunit-testresult {
 	margin: 0;
@@ -26,7 +26,7 @@
 }
 
 
-/** Header */
+/** header */
 
 #qunit-header {
 	padding: 0.5em 0 0.5em 1em;
@@ -52,6 +52,10 @@
 #qunit-header a:hover,
 #qunit-header a:focus {
 	color: #fff;
+}
+
+#qunit-header label {
+	display: inline-block;
 }
 
 #qunit-banner {
@@ -206,7 +210,7 @@
 #qunit-banner.qunit-fail                    { background-color: #EE5757; }
 
 
-/** Result */
+/** resultado */
 
 #qunit-testresult {
 	padding: 0.5em 0.5em 0.5em 2.5em;
@@ -217,10 +221,14 @@
 	border-bottom: 1px solid white;
 }
 
-/** Fixture */
+/** fixture */
 
 #qunit-fixture {
 	position: absolute;
+
 	top: -10000px;
 	left: -10000px;
+
+	width: 1000px;
+	height: 1000px;
 }
