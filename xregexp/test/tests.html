@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+
+<html>
+    <head>
+        <meta charset="UTF-8">
+
+        <title>
+            testes xregexp
+        </title>
+
+        <link rel="stylesheet" href="qunit/qunit.css" type="text/css" media="all">
+    </head>
+
+    <body>
+        <h1 id="qunit-header">
+            testes xregexp
+        </h1>
+
+        <h2 id="qunit-banner"></h2>
+
+        <ol id="qunit-tests"></ol>
+
+        <script src="../src/xregexp.js"></script>
+        <script src="qunit/qunit.js"></script>
+
+        <script>
+            module("API");
+
+            test("disponibilidade básica", function() {
+                ok(XRegExp, "xregexp existe");
+                ok(XRegExp.INSIDE_CLASS, "xregexp.inside_class existe");
+                ok(XRegExp.OUTSIDE_CLASS, "xregexp.outside_class existe");
+                ok(XRegExp.addToken, "xregexp.addtoken existe");
+                ok(XRegExp.cache, "xregexp.cache existe");
+                ok(XRegExp.copyAsGlobal, "xregexp.copyasglobal existe");
+                ok(XRegExp.escape, "xregexp.escape existe");
+                ok(XRegExp.execAt, "xregexp.execat existe");
+                ok(XRegExp.freezeTokens, "xregexp.freezetokens existe");
+                ok(XRegExp.isRegExp, "xregexp.isregexp existe");
+                ok(XRegExp.iterate, "xregexp.iterate existe");
+                ok(XRegExp.matchChain, "xregexp.matchchain existe");
+                ok(XRegExp.version, "xregexp.version existe");
+                ok(RegExp.prototype.apply, "regexp.prototype.apply existe");
+                ok(RegExp.prototype.call, "regexp.prototype.call existe");
+            });
+
+            test("xregexp", function() {
+                var regex = XRegExp("(?:)");
+                var regexG = XRegExp("(?:)", "g");
+                var regexGIM = XRegExp("(?:)", "gim");
+                var regexX = XRegExp("(?:)", "x");
+                var regexCopy = XRegExp(regex);
+                var regexNamedCapture = XRegExp("(?<name>a)\\k<name>");
+
+                equal(XRegExp("(?:)").source, /(?:)/.source, "fonte regex vazia");
+                ok(!XRegExp("(?:)").global, "regex sem sinalizadores");
+                ok(regexG.global, "regex com bandeira global");
+                ok(regexGIM.global && regexGIM.ignoreCase && regexGIM.multiline, "regex com vários sinalizadores");
+                ok(!regexX.extended, "x bandeira despojada");
+                deepEqual(regex, XRegExp(regex), "cópia regex e original são iguais");
+                ok(regex !== XRegExp(regex), "a cópia regex é uma nova instância");
+                ok(XRegExp(regexNamedCapture).exec("aa").name === "a", "a cópia regex retém propriedades de captura nomeadas");
+                ok(function () {try {XRegExp(regex, "g");} catch (err) {return err;}}() instanceof Error, "cópia regex com lançamento de bandeira");
+                ok(XRegExp("(?:)") instanceof RegExp, "o resultado é instanceof regexp");
+                ok(XRegExp("(?:)").constructor === RegExp, "o construtor do resultado é regexp");
+            });
+
+            test("xregexp.version", function() {
+                var parts = XRegExp.version.split(".");
+
+                ok(typeof XRegExp.version === "string", "a versão é uma string");
+                ok(parts.length === 3, "a versão tem três partes delimitadas por pontos");
+                ok(!(isNaN(+parts[0]) || isNaN(+parts[1]) || isNaN(+parts[2])), "as partes da versão são todas numéricas");
+            });
+
+            test("xregexp.addtoken", function () {
+                XRegExp.addToken(/\x01/, function () {return "1";});
+                XRegExp.addToken(/\x02/, function () {return "2";}, XRegExp.INSIDE_CLASS);
+                XRegExp.addToken(/\x03/, function () {return "3";}, XRegExp.OUTSIDE_CLASS);
+                XRegExp.addToken(/\x04/, function () {return "4";}, XRegExp.INSIDE_CLASS | XRegExp.OUTSIDE_CLASS);
+                XRegExp.addToken(/\x05/, function () {return "5";}, XRegExp.OUTSIDE_CLASS, function(){return this.hasFlag("5");});
+                XRegExp.addToken(/\x06/, function () {this.setFlag("m"); return "6";});
+
+                ok(XRegExp("\x01").test("1"), "o escopo padrão corresponde fora da classe");
+                ok(!XRegExp("[\x01]").test("1"), "o escopo padrão não corresponde dentro da classe");
+                ok(!XRegExp("\x02").test("2"), "o escopo inside_class explícito não corresponde à classe externa");
+                ok(XRegExp("[\x02]").test("2"), "o escopo inside_class explícito corresponde dentro da classe");
+                ok(XRegExp("\x03").test("3"), "o escopo outside_class explícito corresponde à classe externa");
+                ok(!XRegExp("[\x03]").test("3"), "o escopo outside_class explícito não corresponde à classe interna");
+                ok(XRegExp("\x04").test("4"), "o escopo inside_class|outside_class explícito corresponde à classe externa");
+                ok(XRegExp("[\x04]").test("4"), "o escopo inside_class|outside_class explícito corresponde dentro da classe");
+                ok(!XRegExp("\x05").test("5"), "o gatilho com hasflag ignora o token quando o sinalizador está faltando");
+                ok(XRegExp("\x05", "5").test("5"), "o gatilho com hasflag usa token quando o sinalizador é incluído");
+                ok(XRegExp("\x06").multiline, "manipulador com setflag ativa sinalizador quando usado");
+            });
+
+            test("xregexp.cache", function () {
+                var cached1 = XRegExp.cache("(?:)");
+                var cached2 = XRegExp.cache("(?:)");
+                var regexWithFlags = XRegExp(". +\\1 1", "gimsx");
+
+                ok(cached1 instanceof RegExp, "retorna um regexp");
+                ok(cached1 === cached2, "referências a padrões armazenados em cache separadamente referem-se ao mesmo objeto");
+                deepEqual(XRegExp.cache(". +\\1 1", "gimsx"), regexWithFlags, "padrão em cache mais sinalizadores");
+            });
+
+            test("xregexp.copyasglobal", function () {
+                var hasNativeY = typeof RegExp.prototype.sticky !== "undefined";
+                var regex = XRegExp("(?<name>a)\\k<name>", "im" + (hasNativeY ? "y" : ""));
+                var globalCopy = XRegExp.copyAsGlobal(regex);
+                var globalOrig = XRegExp("(?:)", "g");
+
+                ok(regex !== globalCopy, "a cópia é uma nova instância");
+                ok(globalCopy.global, "a cópia é global");
+                ok(regex.source === globalCopy.source, "a cópia tem a mesma origem");
+                ok(regex.ignoreCase === globalCopy.ignoreCase && regex.multiline === globalCopy.multiline && regex.sticky === globalCopy.sticky, "a cópia tem as mesmas propriedades ignorecase, multiline e sticky");
+                ok(globalCopy.exec("aa").name, "a cópia mantém recursos de captura nomeados");
+                ok(XRegExp.copyAsGlobal(globalOrig).global, "a cópia do regex global é global");
+            });
+
+            test("XRegExp.escape", function () {
+                equal(XRegExp.escape("[()*+?.\\^$|"), "\\[\\(\\)\\*\\+\\?\\.\\\\\\^\\$\\|", "meta-caracteres são escapados");
+                equal(XRegExp.escape("]{}-, #"), "\\]\\{\\}\\-\\,\\ \\#", "meta-caracteres ocasionais são escapados");
+                equal(XRegExp.escape("abc_<123>!"), "abc_<123>!", "não meta-caracteres não são escapados");
+            });
+
+            test("XRegExp.execAt", function () {
+                var rX = /x/g;
+                var rA = /a/g;
+                var xregexp = XRegExp("(?<name>a)"); // os testes esperam que isso seja não global e use captura nomeada
+                var str = "abcxdef";
+                var match;
+
+                ok(XRegExp.execAt(str, rX, 2), "pós-teste 1");
+                ok(!XRegExp.execAt(str, rX, 5), "pós-teste 2");
+
+                rX.lastIndex = 5;
+                ok(XRegExp.execAt(str, rX, 2), "pos ignora o teste lastindex 1");
+
+                rX.lastIndex = 0;
+                ok(!XRegExp.execAt(str, rX, 5), "pos ignora o teste lastindex 2");
+
+                rA.lastIndex = 5;
+                ok(XRegExp.execAt(str, rA), "pos ignora o teste lastIndex 3 (o padrão de pos é 0)");
+
+                ok(XRegExp.execAt(str, rX, 0, false), "!anchored explícito permite correspondência após pos");
+
+                ok(!XRegExp.execAt(str, rX, 0, true), "a correspondência ancorada falha se a correspondência for possível após (mas não na) posição");
+
+                ok(XRegExp.execAt(str, rX, 3, true), "a correspondência ancorada é bem-sucedida se a correspondência estiver na posição");
+
+                equal(XRegExp.execAt(str, rX, 5), null, "o resultado da falha é nulo");
+
+                deepEqual(XRegExp.execAt(str, xregexp), ["a", "a"], "o resultado da correspondência bem-sucedida é uma matriz com referências anteriores");
+
+                match = XRegExp.execAt(str, xregexp);
+                equal(match.name, "a", "o resultado da correspondência inclui propriedades de captura nomeadas");
+
+                xregexp.lastIndex = 5;
+                XRegExp.execAt(str, xregexp);
+                equal(xregexp.lastIndex, 5, "lastindex de regex não global deixado como está");
+
+                rX.lastIndex = 0;
+                XRegExp.execAt(str, rX);
+                equal(rX.lastIndex, 4, "lastindex da regex global atualizado para o final da partida");
+
+                rX.lastIndex = 5;
+                XRegExp.execAt(str, rX, 2, true);
+                equal(rX.lastIndex, 0, "lastindex do regex global atualizado para 0 após falha");
+
+                equal(XRegExp.execAt("abc", /x/, 5), null, "pos maior que o comprimento da string resulta em falha");
+            });
+
+            test("xregexp.freezetokens", function () {
+                XRegExp.freezeTokens();
+
+                ok(function () {try {XRegExp.addToken(/>>>/, function () {return "Z";});} catch (err) {return err;}}() instanceof Error, "addtoken é lançado após congelamento");
+                ok(!XRegExp(">>>").test("Z"), "token não adicionado");
+            });
+
+            test("xregexp.isregexp", function () {
+                ok(XRegExp.isRegExp(/(?:)/), "regex construído por um regex literal é um regexp");
+
+                ok(XRegExp.isRegExp(RegExp("(?:)")), "regex construído por um regexp é um regexp");
+
+                ok(XRegExp.isRegExp(XRegExp("(?:)")), "regex construído por um xregexp é um regexp");
+
+                ok(!XRegExp.isRegExp(undefined), "indefinido não é um regrxp");
+
+                ok(!XRegExp.isRegExp(null), "nulo não é um regexp");
+
+                ok(!XRegExp.isRegExp({}), "o literal do objeto não é um regexp");
+
+                ok(!XRegExp.isRegExp(function () {}), "a função literal não é regexp");
+
+                var fakeRegex = {};
+
+                fakeRegex.constructor = RegExp;
+                ok(!XRegExp.isRegExp(fakeRegex), "objeto com construtor regexp atribuído não é um regexp");
+
+                var tamperedRegex = /x/;
+
+                tamperedRegex.constructor = {};
+                ok(XRegExp.isRegExp(tamperedRegex), "regexp com construtor object atribuído é um regexp");
+
+                var iframe = document.createElement("iframe");
+                iframe.width = iframe.height = iframe.border = 0; // iframe.style.display = "none";
+                document.body.appendChild(iframe);
+                frames[frames.length - 1].document.write("<script>var regex = /x/;<\/script>");
+                ok(XRegExp.isRegExp(iframe.contentWindow.regex), "regexp construído em outro quadro é um regexp");
+                iframe.parentNode.removeChild(iframe);
+            });
+
+            test("xregexp.iterate", function () {
+                var str = "abc 123 def";
+                var regex = XRegExp("(?<first>\\w)\\w*");
+                var regexG = XRegExp("(?<first>\\w)\\w*", "g");
+                var result;
+
+                result = [];
+                XRegExp.iterate(str, regex, function (m) {result.push(m[0]);});
+                deepEqual(result, ["abc", "123", "def"], "strings correspondidas com regex não global");
+
+                result = [];
+                XRegExp.iterate(str, regexG, function (m) {result.push(m[0]);});
+                deepEqual(result, ["abc", "123", "def"], "strings correspondidas com regex global");
+
+                result = [];
+                XRegExp.iterate(str, regex, function (m) {result.push(m.first);});
+                deepEqual(result, ["a", "1", "d"], "referências anteriores nomeadas");
+
+                result = [];
+                XRegExp.iterate(str, regex, function (m) {result.push(m.index);});
+                deepEqual(result, [0, 4, 8], "índices de correspondência");
+
+                result = [];
+                XRegExp.iterate(str, regex, function (m, i) {result.push(i);});
+                deepEqual(result, [0, 1, 2], "números correspondentes");
+
+                result = [];
+                XRegExp.iterate(str, regex, function (m, i, s) {result.push(s);});
+                deepEqual(result, [str, str, str], "sequências de origem");
+
+                result = [];
+                var str2 = str;
+                XRegExp.iterate(str2, regex, function (m, i, s) {result.push(s); s += s; str2 += str2;});
+                deepEqual(result, [str, str, str], "a manipulação da string de origem no retorno de chamada não afeta a iteração");
+
+                result = [];
+                XRegExp.iterate(str, regex, function (m, i, s, r) {result.push(r);});
+                deepEqual(result, [regex, regex, regex], "regexes de origem");
+
+                result = [];
+                var regex2 = XRegExp(regex);
+                XRegExp.iterate(str, regex2, function (m, i, s, r) {result.push(i); r = /x/; regex2 = /x/;});
+                deepEqual(result, [0, 1, 2], "a manipulação de regex de origem no retorno de chamada não afeta a iteração");
+
+                result = [];
+                regexG.lastIndex = 4;
+                XRegExp.iterate(str, regexG, function (m) {result.push(m[0]);});
+                deepEqual(result, ["abc", "123", "def"], "a iteração começa na posição 0, ignorando lastindex");
+
+                regex.lastIndex = 4;
+                XRegExp.iterate(str, regex, function () {});
+                equal(regex.lastIndex, 4, "lastindex de regex não global não modificado após iteração");
+
+                regexG.lastIndex = 4;
+                XRegExp.iterate(str, regexG, function () {});
+                equal(regexG.lastIndex, 0, "lastindex do regex global redefinido para 0 após a iteração");
+            });
+
+            test("xregexp.matchchain", function () {
+                var html = '<html><img src="http://x.com/img.png"><script src="http://xregexp.com/path/file.ext"><img src="http://xregexp.com/path/to/img.jpg?x"><img src="http://xregexp.com/img2.gif"/></html>';
+
+                var xregexpImgFileNames = XRegExp.matchChain(html, [
+                    {regex: /<img\b([^>]+)>/i, backref: 1}, // atributos da tag <img>
+                    {regex: XRegExp('(?ix) \\s src=" (?<src> [^"]+ )'), backref: "src"}, // valores de atributos src
+                    {regex: XRegExp("^http://xregexp\\.com(/[^#?]+)", "i"), backref: 1}, // caminhos xregexp.com
+                    /[^\/]+$/ // nomes de arquivos (strip caminhos de diretório)
+                ]);
+
+                deepEqual(xregexpImgFileNames, ["img.jpg", "img2.gif"], "cadeia de quatro níveis com objetos regex simples e regex/backref (usando backrefs nomeados e numerados)");
+                deepEqual(XRegExp.matchChain("x", [/x/, /y/]), [], "matriz vazia retornada se não houver correspondência");
+                ok(function () {try {XRegExp.matchChain(html, []);} catch (err) {return err;}}() instanceof Error, "regex de cadeia vazia gera erro");
+            });
+
+            test("regexp.prototype.apply", function () {
+                var regex = /x/;
+
+                deepEqual(regex.apply(null, ["x"]), regex.exec("x"), "aplica com correspondência igual a exec");
+                deepEqual(regex.apply(null, ["y"]), regex.exec("y"), "aplica sem correspondência igual ao exec");
+            });
+
+            test("regexp.prototype.call", function () {
+                var regex = /x/;
+
+                deepEqual(regex.call(null, "x"), regex.exec("x"), "chama com correspondência igual ao exec");
+                deepEqual(regex.call(null, "y"), regex.exec("y"), "chama sem correspondência igual ao exec");
+            });
+
+            module("nativos substituídos");
+
+            test("regexp.prototype.exec", function () {
+                deepEqual(/x/.exec("a"), null, "não correspondente retorna nulo");
+
+                deepEqual(/a/.exec("a"), ["a"], "matriz de retornos de correspondência");
+
+                deepEqual(/(a)/.exec("a"), ["a", "a"], "match retorna array com referências anteriores");
+
+                deepEqual(/()??/.exec("a"), ["", undefined], "referências anteriores a grupos de captura não participantes retornados como indefinidos");
+
+                equal(/a/.exec("12a").index, 2, "a matriz de correspondência tem um índice definido para corresponder ao início");
+
+                equal(/a/.exec("12a").input, "12a", "a matriz de correspondência tem entrada definida para a string de destino");
+
+                var regex = /x/;
+                regex.exec("123x567");
+                equal(regex.lastIndex, 0, "regex lastindex não global é 0 após a partida");
+
+                regex.lastIndex = 1;
+                regex.exec("123x567");
+                equal(regex.lastIndex, 1, "regex lastindex não global não é modificado após a correspondência");
+
+                regex.exec("abc");
+                equal(regex.lastIndex, 1, "regex lastindex não global não é modificado após falha");
+
+                var regexG = /x/g;
+                regexG.exec("123x567");
+                equal(regexG.lastIndex, 4, "Global regex lastIndex is updated after match");
+
+                regexG.lastIndex = 4;
+                equal(regexG.exec("123x567"), null, "Global regex starts match at lastIndex");
+
+                equal(regexG.lastIndex, 0, "Global regex lastIndex reset to 0 after failure");
+
+                var regexZeroLength = /^/g;
+                regexZeroLength.exec("abc");
+                equal(regexZeroLength.lastIndex, 0, "Global regex lastIndex is not incremented after zero-length match");
+
+                regexG.lastIndex = "3";
+                deepEqual(regexG.exec("123x567"), ["x"], "lastIndex converted to integer (test 1)");
+
+                regexG.lastIndex = "4";
+                deepEqual(regexG.exec("123x567"), null, "lastIndex converted to integer (test 2)");
+
+                deepEqual(/1/.exec(1), ["1"], "Numeric argument converted to string (test 1)");
+
+                // in `try..catch` since this throws an error in IE in XRegExp 1.5.0 (fixed in 1.5.1)
+                deepEqual(function () {try {return /1()/.exec(1);} catch (err) {return err;}}(), ["1", ""], "Numeric argument converted to string (test 2)");
+
+                deepEqual(/null/.exec(null), ["null"], "null argument converted to string");
+
+                // This is broken in old Firefox (tested v2.0; it works in v10), but not for any fault of XRegExp.
+                // Uncomment this test if future XRegExp fixes it.
+                //deepEqual(/undefined/.exec(), ["undefined"], "undefined argument converted to string");
+
+                deepEqual(/NaN/.exec(NaN), ["NaN"], "NaN argument converted to string");
+
+                ok(function(){try {RegExp.prototype.exec.call("\\d", "1");} catch (err) {return err;}}() instanceof TypeError, "TypeError thrown when context is not type RegExp");
+            });
+
+            test("regexp.prototype.test", function () {
+                deepEqual(/x/.test("a"), false, "Nonmatch returns false");
+
+                deepEqual(/a/.test("a"), true, "Match returns true");
+
+                var regex = /x/;
+                regex.test("123x567");
+                equal(regex.lastIndex, 0, "Nonglobal regex lastIndex is 0 after match");
+
+                regex.lastIndex = 1;
+                regex.test("123x567");
+                equal(regex.lastIndex, 1, "Nonglobal regex lastIndex is unmodified after match");
+
+                regex.test("abc");
+                equal(regex.lastIndex, 1, "Nonglobal regex lastIndex is unmodified after failure");
+
+                var regexG = /x/g;
+                regexG.test("123x567");
+                equal(regexG.lastIndex, 4, "Global regex lastIndex is updated after match");
+
+                regexG.lastIndex = 4;
+                equal(regexG.test("123x567"), false, "Global regex starts match at lastIndex");
+
+                equal(regexG.lastIndex, 0, "Global regex lastIndex reset to 0 after failure");
+
+                var regexZeroLength = /^/g;
+                regexZeroLength.test("abc");
+                equal(regexZeroLength.lastIndex, 0, "Global regex lastIndex is not incremented after zero-length match");
+
+                regexG.lastIndex = "3";
+                deepEqual(regexG.test("123x567"), true, "lastIndex converted to integer (test 1)");
+
+                regexG.lastIndex = "4";
+                deepEqual(regexG.test("123x567"), false, "lastIndex converted to integer (test 2)");
+
+                deepEqual(/1/.test(1), true, "Argument converted to string");
+                ok(function(){try {RegExp.prototype.test.call("\\d", "1");} catch (err) {return err;}}() instanceof TypeError, "TypeError thrown when context is not type RegExp");
+            });
+
+            test("string.prototype.match", function () {
+                deepEqual("a".match(/x/), null, "regex não global: non-match retorna null");
+
+                deepEqual("a".match(/a/), ["a"], "regex não global: correspondência retorna um array");
+
+                deepEqual("a".match(/(a)/), ["a", "a"], "regex não global: match retorna array com referências anteriores");
+
+                deepEqual("a".match(/()??/), ["", undefined], "regex não global: referências anteriores a grupos de captura não participantes retornados como indefinidos");
+
+                equal("12a".match(/a/).index, 2, "regex não global: a matriz de correspondência possui um índice definido para corresponder ao início");
+
+                equal("12a".match(/a/).input, "12a", "regex não global: a matriz de correspondência tem entrada definida para a string de destino");
+
+                var regex = /x/;
+                "123x567".match(regex);
+                equal(regex.lastIndex, 0, "regex não global: lastindex é 0 após a partida");
+
+                regex.lastIndex = 1;
+                "123x567".match(regex);
+                equal(regex.lastIndex, 1, "regex não global: lastindex não é modificado após a correspondência");
+
+                "abc".match(regex);
+                equal(regex.lastIndex, 1, "regex não global: lastindex não é modificado após falha");
+
+                var regexG = /x/g;
+                "123x567".match(regexG);
+                equal(regexG.lastIndex, 0, "regex global: lastindex é 0 após a partida");
+
+                regexG.lastIndex = 4;
+                deepEqual("123x567".match(regexG), ["x"], "regex global: a pesquisa começa na posição zero, apesar do lastindex");
+
+                regexG.lastIndex = 4;
+                "abc".match(regexG);
+                equal(regexG.lastIndex, 0, "regex global: lastindex redefinido para 0 após falha");
+
+                deepEqual("1".match("^(1)"), ["1", "1"], "argumento convertido em regexp");
+
+                deepEqual(String.prototype.match.call(1, /1/), ["1"], "o contexto não string é convertido em string");
+            });
+
+            test("string.prototype.replace", function () {
+                equal("xaaa".replace(/a/, "b"), "xbaa", "pesquisa básica de regex não global");
+                equal("xaaa".replace(/a/g, "b"), "xbbb", "pesquisa básica de regex global");
+                equal("xaaa".replace("a", "b"), "xbaa", "pesquisa básica de strings");
+                equal("xaaa".replace(/a(a)/, "$1b"), "xaba", "referência retroativa $1 na string de substituição");
+                equal("xaaa".replace(/a(a)/, "$01b"), "xaba", "referência retroativa $01 na string de substituição");
+                equal("xaaa".replace(/a(a)/, "$001b"), "x$001ba", "$001 in replacement string");
+                equal("xaaa".replace(/a()()()()()()()()()(a)/, "$10b"), "xaba", "Backreference $11 in replacement string");
+                equal("xaaa".replace(/a()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()(a)/, "$99b"), "xaba", "Backreference $99 in replacement string");
+                equal("xaaa".replace(/a()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()(a)/, "$100b"), "x0ba", "$100 in replacement string");
+                equal("xaaa".replace(/aa/, "$&b"), "xaaba", "Backreference $& in replacement string");
+                equal("xaaa".replace(/aa/, "$'b"), "xaba", "Backreference $' in replacement string");
+                equal("xaaa".replace(/aa/, "$`b"), "xxba", "Backreference $` in replacement string");
+                equal("xaaa".replace(/aa/, "$$b"), "x$ba", "$$ in replacement string");
+                equal("xaaa".replace(/aa/, "$0b"), "x$0ba", "$0 in replacement string");
+                equal("xaaa".replace(/aa/, "$1b"), "x$1ba", "$1 in replacement string for regex with no backreference");
+                equal("xaaa".replace("a(a)", "$1b"), "xaaa", "Parentheses in string search 1");
+                equal("xa(a)a".replace("a(a)", "$1b"), "x$1ba", "Parentheses in string search 2");
+                equal("xaaa".replace("aa", "$&b"), "xaaba", "Backreference $& in replacement string for string search");
+                equal("xaaa".replace("aa", "$'b"), "xaba", "Backreference $' in replacement string for string search");
+                equal("xaaa".replace("aa", "$`b"), "xxba", "Backreference $` in replacement string for string search");
+                equal("xaaa".replace("aa", "$$b"), "x$ba", "$$ in replacement string for string search");
+                equal("xaaa".replace("aa", "$0b"), "x$0ba", "$0 in replacement string for string search");
+                equal("xaaa".replace(/a/, function () {return "b";}), "xbaa", "Nonglobal regex search with basic function replacement");
+                equal("xaaa".replace(/a/g, function () {return "b";}), "xbbb", "Global regex search with basic function replacement");
+                equal("xaaa".replace(/aa/, function ($0) {return $0 + "b";}), "xaaba", "Regex search with function replacement, using match");
+                equal("xaaa".replace(/a(a)/, function ($0, $1) {return $1 + "b";}), "xaba", "Regex search with function replacement, using backreference 1");
+                equal("xaaa".replace(/a(a)/, function ($0, $1) {return "$1b";}), "x$1ba", "Regex search with function replacement, using $1 in return string");
+                equal("xaaa".replace(/a/, function () {return "$&b";}), "x$&baa", "Regex search with function replacement, using $& in return string");
+                equal("xaaa".replace(/a/g, function ($0, pos) {return "" + pos;}), "x123", "Regex search with function replacement, using pos in return string");
+                equal("xaaa".replace(/(a)/g, function ($0, $1, pos) {return "" + pos;}), "x123", "Regex (with capturing group) search with function replacement, using pos in return string");
+                equal("xaaa".replace(/a/, function ($0, pos, str) {return str;}), "xxaaaaa", "Regex search with function replacement, using source string in return string");
+                equal("xaaa".replace(/(a)/, function ($0, $1, pos, str) {return str;}), "xxaaaaa", "Regex (with capturing group) search with function replacement, using source string in return string");
+                equal("xaaa".replace("a", function () {return "b";}), "xbaa", "String search with basic function replacement");
+                equal("xaaa".replace("a", function ($0) {return $0;}), "xaaa", "String search with function replacement, using match");
+
+                // quebrado no safari (testado v5.1.2/7534.52.7), mas não por falha do xregexp.
+                // equal("xaaa".replace("a", function () {return "$&";}), "x$&aa", "String search with function replacement, using $& in return string");
+
+                equal("xaaa".replace("a", function ($0, pos) {return "" + pos;}), "x1aa", "pesquisa de string com substituição de função, usando pos na string de retorno");
+                equal("xaaa".replace("a", function ($0, pos, str) {return str;}), "xxaaaaa", "pesquisa de string com substituição de função, usando string de origem na string de retorno");
+                equal(String.prototype.replace.call(100, /0/g, "x"), "1xx", "número como contexto");
+                equal(String.prototype.replace.call(100, /(0)/g, "$1x"), "10x0x", "número como contexto com referência anterior $1 na string de substituição");
+                equal(String.prototype.replace.call(100, /0/g, function ($0) {return $0 + "x";}), "10x0x", "número como contexto com substituição de função");
+                equal(String.prototype.replace.call(100, "0", "x"), "1x0", "pesquisa de string com número como contexto");
+                equal(String.prototype.replace.call(100, "0", "$&x"), "10x0", "pesquisa de string com número como contexto, com referência anterior $& na string de substituição");
+                equal(String.prototype.replace.call(["a","b"], /,/g, "x"), "axb", "array como um contexto");
+                equal("10x10".replace(10, "x"), "xx10", "número como pesquisa (convertido em string)");
+                equal("xaaa,ba,b".replace(["a","b"], "x"), "xaaxa,b", "array como pesquisa (convertido em string)");
+                equal("xaaa".replace(/a/g, 1.1), "x1.11.11.1", "número como substituição (convertido em string)");
+                equal("xaaa".replace(/a/g, ["a","b"]), "xa,ba,ba,b", "array as replacement (converted to string)");
+                equal("100".replace(/0/, function ($0, pos, str) {return typeof str;}), "1string0", "typeof último argumento na função de substituição é string");
+                equal(new String("100").replace(/0/, function ($0, pos, str) {return typeof str;}), "1string0", "typeof último argumento na função de substituição é string, quando chamado em string como contexto");
+                equal(String.prototype.replace.call(100, /0/, function ($0, pos, str) {return typeof str;}), "1string0", "typeof último argumento na função de substituição é string, quando chamado pelo número como contexto");
+
+                // em `try..catch`, pois isso gera um erro no xregexp v1.5.0 (corrigido na v1.5.1)
+                equal(function () {try {return "xaaa".replace(/a/);} catch (err) {return err;}}(), "xundefinedaa", 'Replacement string is "undefined", when not provided');
+
+                equal("xaaa".replace(), "xaaa", "fonte retornada quando nenhuma substituição foi fornecida");
+
+                var regex = /x/;
+                "123x567".replace(regex, "_");
+                equal(regex.lastIndex, 0, "lastindex regex não global inalterado é 0 após a correspondência");
+
+                regex.lastIndex = 1;
+                "123x567".replace(regex, "_");
+                equal(regex.lastIndex, 1, "lastindex regex não global não é modificado após a correspondência");
+
+                "abc".replace(regex, "_");
+                equal(regex.lastIndex, 1, "lastindex regex não global não é modificado após falha");
+
+                var regexG = /x/g;
+                "123x567".replace(regexG, "_");
+                equal(regexG.lastIndex, 0, "lastindex regex global inalterado é 0 após a partida");
+
+                regexG.lastIndex = 5;
+                equal("123x567".replace(regexG, "_"), "123_567", "regex global ignora lastindex como posição inicial");
+
+                regexG.lastIndex = 5;
+                "123x567".replace(regexG, "_");
+                equal(regexG.lastIndex, 0, "lastindex da regex global redefinido para 0");
+
+                equal("x".replace(/x/, /x/), "/x/", "pesquisa pelo regex com substituição regrxp");
+
+                // todo: adicionar teste(s) de lastindex de dentro de funções de substituição
+            });
+
+            test("String.prototype.split", function () {
+                // todo: adicionar testes (testes de funcionalidade básica)
+            });
+
+            module("extensões nativas substituídas");
+
+            test("regexp.prototype.exec", function () {
+                equal(XRegExp("(?<name>a)").exec("a").name, "a", "a matriz de correspondência nomeou propriedades de captura");
+            });
+
+            test("string.prototype.match", function () {
+                equal("a".match(XRegExp("(?<name>a)")).name, "a", "a matriz de correspondência nomeou propriedades de captura");
+            });
+
+            test("string.prototype.replace", function () {
+                // todo: adicionar testes
+            });
+
+            module("nova sintaxe e sinalizadores");
+
+            test("captura nomeada", function () {
+                // todo: adicionar testes
+            });
+
+            test("comentários embutidos", function () {
+                // todo: adicionar testes
+            });
+
+            test("modificador de modo principal", function () {
+                // todo: adicionar testes
+            });
+
+            test("flag s (modo dotall)", function () {
+                // todo: adicionar testes
+            });
+
+            test("flag x (modo estendido)", function () {
+                // todo: adicionar testes
+            });
+
+            module("correções entre navegadores");
+
+            test("valores de captura não participantes", function () {
+                // todo: adicionar testes
+            });
+
+            test("regexp.prototype.lastindex", function () {
+                // todo: adicionar testes
+            });
+
+            test("string.prototype.split com separador regex", function () {
+                // alguns desses testes não falham em nenhum navegador, mas muitos falham em
+                // pelo menos uma versão de um navegador
+
+                deepEqual("".split(), [""]);
+                deepEqual("".split(/./), [""]);
+                deepEqual("".split(/.?/), []);
+                deepEqual("".split(/.??/), []);
+                deepEqual("ab".split(/a*/), ["", "b"]);
+                deepEqual("ab".split(/a*?/), ["a", "b"]);
+                deepEqual("ab".split(/(?:ab)/), ["", ""]);
+                deepEqual("ab".split(/(?:ab)*/), ["", ""]);
+                deepEqual("ab".split(/(?:ab)*?/), ["a", "b"]);
+                deepEqual("test".split(""), ["t", "e", "s", "t"]);
+                deepEqual("test".split(), ["test"]);
+                deepEqual("111".split(1), ["", "", "", ""]);
+                deepEqual("test".split(/(?:)/, 2), ["t", "e"]);
+                deepEqual("test".split(/(?:)/, -1), ["t", "e", "s", "t"]);
+                deepEqual("test".split(/(?:)/, undefined), ["t", "e", "s", "t"]);
+                deepEqual("test".split(/(?:)/, null), []);
+                deepEqual("test".split(/(?:)/, NaN), []);
+                deepEqual("test".split(/(?:)/, true), ["t"]);
+                deepEqual("test".split(/(?:)/, "2"), ["t", "e"]);
+                deepEqual("test".split(/(?:)/, "two"), []);
+                deepEqual("a".split(/-/), ["a"]);
+                deepEqual("a".split(/-?/), ["a"]);
+                deepEqual("a".split(/-??/), ["a"]);
+                deepEqual("a".split(/a/), ["", ""]);
+                deepEqual("a".split(/a?/), ["", ""]);
+                deepEqual("a".split(/a??/), ["a"]);
+                deepEqual("ab".split(/-/), ["ab"]);
+                deepEqual("ab".split(/-?/), ["a", "b"]);
+                deepEqual("ab".split(/-??/), ["a", "b"]);
+                deepEqual("a-b".split(/-/), ["a", "b"]);
+                deepEqual("a-b".split(/-?/), ["a", "b"]);
+                deepEqual("a-b".split(/-??/), ["a", "-", "b"]);
+                deepEqual("a--b".split(/-/), ["a", "", "b"]);
+                deepEqual("a--b".split(/-?/), ["a", "", "b"]);
+                deepEqual("a--b".split(/-??/), ["a", "-", "-", "b"]);
+                deepEqual("".split(/()()/), []);
+                deepEqual(".".split(/()()/), ["."]);
+                deepEqual(".".split(/(.?)(.?)/), ["", ".", "", ""]);
+                deepEqual(".".split(/(.??)(.??)/), ["."]);
+                deepEqual(".".split(/(.)?(.)?/), ["", ".", undefined, ""]);
+                deepEqual("A<B>bold</B>and<CODE>coded</CODE>".split(/<(\/)?([^<>]+)>/), ["A", undefined, "B", "bold", "/", "B", "and", undefined, "CODE", "coded", "/", "CODE", ""]);
+                deepEqual("test".split(/(.?)/), ["","t","","e","","s","","t",""]);
+                deepEqual("tesst".split(/(s)*/), ["t", undefined, "e", "s", "t"]);
+                deepEqual("tesst".split(/(s)*?/), ["t", undefined, "e", undefined, "s", undefined, "s", undefined, "t"]);
+                deepEqual("tesst".split(/(s*)/), ["t", "", "e", "ss", "t"]);
+                deepEqual("tesst".split(/(s*?)/), ["t", "", "e", "", "s", "", "s", "", "t"]);
+                deepEqual("tesst".split(/(?:s)*/), ["t", "e", "t"]);
+                deepEqual("tesst".split(/(?=s+)/), ["te", "s", "st"]);
+                deepEqual("test".split("t"), ["", "es", ""]);
+                deepEqual("test".split("es"), ["t", "t"]);
+                deepEqual("test".split(/t/), ["", "es", ""]);
+                deepEqual("test".split(/es/), ["t", "t"]);
+                deepEqual("test".split(/(t)/), ["", "t", "es", "t", ""]);
+                deepEqual("test".split(/(es)/), ["t", "es", "t"]);
+                deepEqual("test".split(/(t)(e)(s)(t)/), ["", "t", "e", "s", "t", ""]);
+                deepEqual(".".split(/(((.((.??)))))/), ["", ".", ".", ".", "", "", ""]);
+                deepEqual(".".split(/(((((.??)))))/), ["."]);
+                deepEqual("a b c d".split(" ", -(Math.pow(2, 32) - 1)), ["a"]); // teste de número negativo muito grande por brian 0
+            });
+
+            test("Regular expression syntax", function () {
+                // todo: adicionar testes
+            });
+
+            test("Replacement text syntax", function () {
+                // todo: adicionar testes
+            });
+
+            test("Type conversion", function () {
+                // estes são duplicados dos testes string.prototype.replace no módulo nativo substituído
+                equal(new String("100").replace(/0/, function ($0, pos, str) {return typeof str;}), "1string0", "string.prototype.replace: o último argumento do tipo na função de substituição é string, quando chamado em String como contexto");
+                equal(String.prototype.replace.call(100, /0/, function ($0, pos, str) {return typeof str;}), "1string0", "string.prototype.replace: o último argumento do tipo na função de substituição é uma string, quando chamado no número como contexto");
+
+                // todo: adicionar testes
+            });
+        </script>
+    </body>
+</html>
