@@ -6,30 +6,22 @@ function Hammer(element, options) {
         drag_vertical: false,
         drag_horizontal: true,
         drag_min_distance: 20,
-        drag_space: 70,
+        drag_threshold: 70,
 
-        zoom: true,
-        zoom_min: 1,
-        zoom_max: 3,
-
-        rotate: true,
-        rotate_min: 0,
-        rotate_max: 180,
+        transform: true, // zoom e rotação
 
         tap: true,
         tap_double: true,
         tap_max_interval: 500,
 
         hold: true,
-        hold_timeout: 500,
-
-        transform_element: $(">:first", element)
+        hold_timeout: 500
     };
 
     options = $.extend({}, defaults, options);
 
     // certificar-se que o elemento esteja em um objeto jquery
-    var element = $(element);
+    element = $(element);
 
     // alguns hacks css
     element.css({
@@ -83,8 +75,8 @@ function Hammer(element, options) {
      */
     this.getDirectionFromAngle = function(angle) {
         for (var name in this.DIRECTION) {
-            var min = this.DIRECTION[name] - options.slide_space;
-            var max = this.DIRECTION[name] + options.slide_space;
+            var min = this.DIRECTION[name] - options.drag_threshold;
+            var max = this.DIRECTION[name] + options.drag_threshold;
 
             if (name == 'UP') {
                 if (min < Math.abs(angle) && max > Math.abs(angle)) {
@@ -324,14 +316,16 @@ function Hammer(element, options) {
                         }
 
                         // toque único
-                        else if (options.tap) {
+                        else {
                             _gesture = 'tap';
 
                             _prev_tap_end_time = now;
 
-                            triggerEvent("onTap");
+                            if (options.tap) {
+                                triggerEvent("onTap");
 
-                            ev.preventDefault();
+                                ev.preventDefault();
+                            }
                         }
                     }
                 }
@@ -345,5 +339,11 @@ function Hammer(element, options) {
         }
     }
 
-    $(element).bind("touchstart touchmove touchend", handleEvents);
+    if('ontouchstart' in window) {
+        $(element).bind("touchstart touchmove touchend", handleEvents);
+    } else {
+        $(document).bind("mouseup", handleEvents);
+        
+        $(element).bind("mousedown mousemove", handleEvents);
+    }
 }
