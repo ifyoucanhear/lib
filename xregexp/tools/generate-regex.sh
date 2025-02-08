@@ -14,7 +14,7 @@ curl -# http://www.unicode.org/Public/6.1.0/ucd/UnicodeData.txt > UnicodeData-6.
 python parse.py UnicodeData-6.1.0.txt > output.txt
 
 # mini hack para remover o último comma
-sed -i '' -e 's/,$//' output.txt
+sed -i '' -e '$s/,$//' output.txt
 
 # mostrar o resultado
 cat output.txt
