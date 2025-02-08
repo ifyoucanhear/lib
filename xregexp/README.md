@@ -4,7 +4,7 @@ fornece expressões regulares JavaScript aumentadas e extensíveis. você obtém
 
 ## exemplos de uso
 
-```javascript
+```html
 <script src="xregexp.js"></script>
 <script>
     var date = XRegExp('(?<year>  [0-9]{4}) -?  # ano  \n\
