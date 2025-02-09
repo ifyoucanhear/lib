@@ -1,9 +1,8 @@
-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<!DOCTYPE html>
 
-<html xmlns="http://www.w3.org/1999/xhtml">
+<html>
     <head>
-        <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+        <meta name="viewport" content="width=530, initial-scale=1.0, user-scalable=yes">
 
         <style>
             #slideshow {
@@ -24,6 +23,7 @@
 
                 -webkit-transition: all .2s ease-out;
                 -moz-transition: all .2s ease-out;
+                -o-transition: all .2s ease-out;
                 transition: all .2s ease-out;
 
                 width: 3000px;
@@ -92,23 +92,23 @@
         <div id="slideshow">
             <ul>
                 <li>
-                    <img src="http://placehold.it/500x300" width="500" height="300" alt="">
+                    <img src="http://placekitten.com/500/300" width="500" height="300" alt="">
                 </li>
 
                 <li>
-                    <img src="http://placehold.it/500x300" width="500" height="300" alt="">
+                    <img src="http://placekitten.com/501/301" width="500" height="300" alt="">
                 </li>
 
                 <li>
-                    <img src="http://placehold.it/500x300" width="500" height="300" alt="">
+                    <img src="http://placekitten.com/502/302" width="500" height="300" alt="">
                 </li>
 
                 <li>
-                    <img src="http://placehold.it/500x300" width="500" height="300" alt="">
+                    <img src="http://placekitten.com/503/303" width="500" height="300" alt="">
                 </li>
 
                 <li>
-                    <img src="http://placehold.it/500x300" width="500" height="300" alt="">
+                    <img src="http://placekitten.com/504/304" width="500" height="300" alt="">
                 </li>
             </ul>
         </div>
@@ -219,7 +219,7 @@
             var slideshow = new Slideshow("#slideshow ul", "#overview li");
 
             // prever o próximo (ou anterior) slide
-            hammer.onDrag = function(position, direction, distance, angle) {
+            hammer.onDrag = function(ev, position, direction, distance, angle) {
                 var left = 0;
 
                 // determina para qual direção é preciso mostrar a preview
@@ -237,14 +237,14 @@
 
             // moverá o próximo (ou anterior) slide quando for aberto
             // mais de 1/3 da tela
-            hammer.onDragEnd = function(direction, distance, angle) {
+            hammer.onDragEnd = function(ev, direction, distance, angle) {
                 // restaura a margem
                 slideshow.getContainer().css({
                     marginLeft: 0
                 });
 
                 // caso o slide seja movido 1/3 e então navegar
-                if (distance > (510 / 3)) {
+                if (Math.abs(distance) > (510 / 3)) {
                     if (direction == hammer.DIRECTION.RIGHT) {
                         slideshow.prev();
                     } else if (direction == hammer.DIRECTION.LEFT) {

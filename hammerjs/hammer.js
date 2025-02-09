@@ -1,18 +1,25 @@
+/**
+ * hammer.js v0.01
+ */
+
 function Hammer(element, options) {
     var self = this;
 
     var defaults = {
+        prevent_default: false, // previne (ou não) o evento padrão
+
         drag: true,
         drag_vertical: false,
         drag_horizontal: true,
         drag_min_distance: 20,
-        drag_threshold: 70,
+        drag_threshold: 90, // o quanto o sliding pode estar fora da direção exata
 
         transform: true, // zoom e rotação
 
         tap: true,
         tap_double: true,
-        tap_max_interval: 500,
+        tap_max_interval: 300,
+        tap_double_distance: 20,
 
         hold: true,
         hold_timeout: 500
@@ -24,12 +31,22 @@ function Hammer(element, options) {
     element = $(element);
 
     // alguns hacks css
-    element.css({
-        "-webkit-user-select": "none",
-        "-webkit-touch-callout": "none",
-        "-webkit-user-drag": "none",
-        "-moz-user-drag": "none",
-        "-webkit-tap-highlight-color": "rgba(0, 0, 0, 0)"
+    $(['-webkit-', '-moz-', '-ms-', '-o-', '']).each(function() {
+        var css = {};
+        var vendor = this;
+        
+        var props = {
+            "user-select": "none",
+            "touch-callout": "none",
+            "user-drag": "none",
+            "tap-highlight-color": "rgba(0, 0, 0, 0)"
+        };
+
+        for (var prop in props) {
+            css[vendor + prop] = props[prop];
+        }
+
+        element.css(css);
     });
 
     // definição das direções
@@ -61,11 +78,15 @@ function Hammer(element, options) {
     var _prev_gesture = null;
 
     var _touch_start_time = null;
+    var _prev_tap_pos = { x: 0, y: 0 };
     var _prev_tap_end_time = null;
 
     var _hold_timer = null;
 
     var _offset = {};
+
+    // manter o tracking do status do mouse
+    var _mousedown = false;
 
     /**
      * ângulo para definição de direção
@@ -75,35 +96,25 @@ function Hammer(element, options) {
      * @return int direção
      */
     this.getDirectionFromAngle = function(angle) {
-        for (var name in this.DIRECTION) {
-            var min = this.DIRECTION[name] - options.drag_threshold;
-            var max = this.DIRECTION[name] + options.drag_threshold;
+        var dir, min, max, name;
+
+        for (name in this.DIRECTION) {
+            dir = this.DIRECTION[name];
+
+            min = dir - options.drag_threshold;
+            max = dir + options.drag_threshold;
 
             if (name == 'UP') {
                 if (min < Math.abs(angle) && max > Math.abs(angle)) {
-                    return this.DIRECTION[name];
+                    return dir;
                 }
             }
 
             // apenas checa se está entre os ângulos
             if (min < angle && max > angle) {
-                return this.DIRECTION[name];
+                return dir;
             }
         }
-    };
-
-    /**
-     * obtém a porcentagem do movimento da altura/largura do container
-     * 
-     * @param float distância
-     * @param int direção
-     * 
-     * @return float porcentagem
-     */
-    this.distanceToPercentage = function(distance, direction) {
-        var dim = self.directionIsVertical(direction) ? element.height() : element.width();
-
-        return (100 / dim) * distance;
     };
 
     /**
@@ -191,103 +202,167 @@ function Hammer(element, options) {
         _gesture = null;
     }
 
-    function handleEvents(ev) {
-        switch (ev.type) {
+    var gestures = {
+        // gesto de pressionar (acionado em touchstart)
+        hold: function(event) {
+            // apenas quando um dedo estiver na tela
+            if (options.hold && _fingers == 1) {
+                _gesture = 'hold';
+
+                clearTimeout(_hold_timer);
+
+                _hold_timer = setTimeout(function() {
+                    if (_gesture == 'hold' && _fingers == 1) {
+                        triggerEvent("onHold", [event, _pos.start]);
+                    }
+                }, options.hold_timeout);
+            }
+        },
+
+        // gesto de arrastar (acionado em mousemove)
+        drag: function(event) {
+            // obtém a distância que foi movida
+            var _distance_x = Math.abs(_pos.move.x - _pos.start.x);
+            var _distance_y = Math.abs(_pos.move.y - _pos.start.y);
+
+            _distance = Math.max(_distance_x, _distance_y);
+
+            // movimento mínimo necessário
+            if (options.drag && (_distance > options.drag_min_distance) || _gesture == 'drag') {
+                _gesture = 'drag';
+
+                // calcula o ângulo
+                _angle = getAngle(_pos.start, _pos.move);
+                _direction = self.getDirectionFromAngle(_angle);
+
+                // checa o movimento e para caso esteja indo para a direção errada
+                var is_vertical = (self.DIRECTION.UP == _direction || self.DIRECTION.DOWN == _direction);
+
+                if (((is_vertical && !options.drag_vertical) || (!is_vertical && !options.drag_horizontal)) && (_distance > options.drag_min_distance)) {
+                    return;
+                }
+
+                var position = {
+                    x: _pos.move.x - _offset.left,
+                    y: _pos.move.y - _offset.top
+                };
+
+                // na primeira vez em que o evento for alertado
+                if (_first) {
+                    triggerEvent("onDragStart", [event, position, _direction, _distance, _angle]);
+
+                    _first = false;
+                }
+
+                // evento slide normal
+                triggerEvent("onDrag", [event, position, _direction, _distance, _angle]);
+
+                event.preventDefault();
+            }
+        },
+
+        // gesto de transformação (acionado em touchmove)
+        transform: function(event) {
+            if (options.transform) {
+                _gesture = 'transform';
+
+                var scale = event.originalEvent.scale;
+                var rotation = event.originalEvent.rotation;
+
+                if(scale || rotation) {
+                    _pos.center = {
+                        x: ((_pos.move[0].x + _pos.move[1].x) / 2) - _offset.left,
+                        y: ((_pos.move[0].y + _pos.move[1].y) / 2) - _offset.top
+                    };
+
+                    // na primeira vez em que o evento for alertado
+                    if (_first) {
+                        triggerEvent("onTransformStart", [event, _pos.center, scale, rotation]);
+                        
+                        _first = false;
+                    }
+
+                    triggerEvent("onTransform", [event, _pos.center, scale, rotation]);
+
+                    event.preventDefault();
+                }
+            }
+        },
+
+        // gesto de toque e toque duplo (acionado em touchend)
+        tap: function(event) {
+            // compara o tipo de gesto pelo tempo
+            var now = new Date().getTime();
+            var touch_time = now - _touch_start_time;
+
+            // não aciona nada quando o hold estiver acionado
+            if (options.hold && !(options.hold && options.hold_timeout > touch_time)) {
+                return;
+            }
+
+            // quando o evento anterior for tocado e o toque foi um max_interval
+            if (options.tap_double && _prev_gesture == 'tap' && (_touch_start_time - _prev_tap_end_time) < options.tap_max_interval) {
+                if (_prev_tap_pos && _pos.start && Math.max(Math.abs(_prev_tap_pos.x - _pos.start.x), Math.abs(_prev_tap_pos.y - _pos.start.y)) < options.tap_double_distance) {
+                    _gesture = 'double_tap';
+                    _prev_tap_end_time = null;
+
+                    triggerEvent("onDoubleTap", [event, _pos.start]);
+
+                    event.preventDefault();
+                }
+            }
+
+            // toque único
+            else {
+                _gesture = 'tap';
+
+                _prev_tap_end_time = now;
+                _prev_tap_pos = _pos.start;
+
+                if (options.tap) {
+                    triggerEvent("onTap", [event, _pos.start]);
+
+                    event.preventDefault();
+                }
+            }
+        }
+    };
+
+    function handleEvents(event) {
+        switch (event.type) {
             case 'mousedown':
             case 'touchstart':
-                _pos.start = getXYfromEvent(ev);
+                _pos.start = getXYfromEvent(event);
                 _touch_start_time = new Date().getTime();
-                _fingers = countFingers(ev);
+                _fingers = countFingers(event);
                 _first = true;
                 _offset = element.offset();
 
                 // segurar
-                if (options.hold && _fingers == 1) {
-                    _gesture = 'hold';
+                gestures.hold(event);
 
-                    clearTimeout(_hold_timer);
-
-                    _hold_timer = setTimeout(function() {
-                        if (_gesture == 'hold' && _fingers == 1) {
-                            triggerEvent("onHold");
-                        }
-
-                    }, options.hold_timeout);
+                if (options.prevent_default) {
+                    event.preventDefault();
                 }
 
                 break;
 
             case 'mousemove':
             case 'touchmove':
-                _pos.move = getXYfromEvent(ev);
+                if (!_mousedown) {
+                    return false;
+                }
+
+                _pos.move = getXYfromEvent(event);
 
                 switch (_fingers) {
                     case 1:
-                        // obtém a distância que foi movida
-                        _distance = Math.max(Math.abs(_pos.move.x - _pos.start.x), Math.abs(_pos.move.y - _pos.start.y));
-
-                        // movimento mínimo necessário
-                        if (options.drag && (_distance > options.drag_min_distance) || _gesture == 'drag') {
-                            _gesture = 'drag';
-
-                            // calcula o ângulo
-                            _angle = getAngle(_pos.start, _pos.move);
-                            _direction = self.getDirectionFromAngle(_angle);
-
-                            // checa o movimento e para caso esteja indo para a direção errada
-                            var is_vertical = (self.DIRECTION.UP == _direction || self.DIRECTION.DOWN == _direction);
-
-                            if ((is_vertical && !options.drag_vertical) || (!is_vertical && !options.drag_horizontal)) {
-                                reset();
-
-                                return;
-                            }
-
-                            // para o evento padrão
-                            ev.preventDefault();
-
-                            var position = {
-                                x: _pos.move.x - _offset.left,
-                                y: _pos.move.y- _offset.top
-                            };
-
-                            // no primeiro alerta
-                            if (_first) {
-                                triggerEvent("onDragStart", [position, _direction, _distance, _angle]);
-
-                                _first = false;
-                            }
-
-                            // evento de slide normal
-                            triggerEvent("onDrag", [position, _direction, _distance, _angle]);
-                        }
+                        gestures.drag(event);
 
                         break;
 
-                    // dois dedos
                     case 2:
-                        _gesture = 'transform';
-
-                        var scale = ev.originalEvent.scale;
-                        var rotation = ev.originalEvent.rotation;
-
-                        if (scale || rotation) {
-                            _pos.center = {
-                                x: ((_pos.move[0].x + _pos.move[1].x) / 2) - _offset.left,
-                                y: ((_pos.move[0].y + _pos.move[1].y) / 2) - _offset.top
-                            };
-
-                            // no primeiro alerta
-                            if (_first) {
-                                triggerEvent("onTransformStart", [_pos.center, scale, rotation]);
-
-                                _first = false;
-                            }
-
-                            triggerEvent("onTransform", [_pos.center, scale, rotation]);
-                        }
-
-                        ev.preventDefault();
+                        gestures.transform(event);
 
                         break;
                 }
@@ -296,41 +371,18 @@ function Hammer(element, options) {
 
             case 'mouseup':
             case 'touchend':
-                if (_gesture == 'drag') {
-                    triggerEvent("onDragEnd", [_direction, _distance, _angle]);
-                } else if (_gesture == 'transform') {
-                    triggerEvent("onTransformEnd", [_pos.center, ev.originalEvent.scale, ev.originalEvent.rotation]);
+                _mousedown = false;
+
+                // gesto de arrastar (dragstart é alertado, então dragend é possível)
+                if (_gesture == 'drag' && !_first) {
+                    triggerEvent("onDragEnd", [event, _direction, _distance, _angle]);
+                }
+                
+                // gesto de transformação (transformstart é alertado, então transformend é possível)
+                else if (_gesture == 'transform' && !_first) {
+                    triggerEvent("onTransformEnd", [event, _pos.center, event.originalEvent.scale, event.originalEvent.rotation]);
                 } else {
-                    // compara o tipo de gesto pelo tempo
-                    var now = new Date().getTime();
-                    var touch_time = now - _touch_start_time;
-
-                    // não dispara quando o hold estiver disparado
-                    if (!options.hold || (options.hold && options.hold_timeout > touch_time)) {
-                        // quando o evento anterior for disparado
-                        if (options.tap_double && _prev_gesture == 'tap' && (_touch_start_time - _prev_tap_end_time) < options.tap_max_interval) {
-                            _gesture = 'double_tap';
-
-                            _prev_tap_end_time = null;
-
-                            triggerEvent("onDoubleTap", [_pos.start]);
-
-                            ev.preventDefault();
-                        }
-
-                        // toque único
-                        else {
-                            _gesture = 'tap';
-
-                            _prev_tap_end_time = now;
-
-                            if (options.tap) {
-                                triggerEvent("onTap", [_pos.start]);
-
-                                ev.preventDefault();
-                            }
-                        }
-                    }
+                    gestures.tap(event);
                 }
 
                 _prev_gesture = _gesture;
