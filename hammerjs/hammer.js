@@ -272,19 +272,19 @@ function Hammer(element, options) {
                         var rotation = ev.originalEvent.rotation;
 
                         if (scale || rotation) {
-                            var center = {
+                            _pos.center = {
                                 x: ((_pos.move[0].x + _pos.move[1].x) / 2) - _offset.left,
                                 y: ((_pos.move[0].y + _pos.move[1].y) / 2) - _offset.top
                             };
 
                             // no primeiro alerta
                             if (_first) {
-                                triggerEvent("onTransformStart", [center, scale, rotation]);
+                                triggerEvent("onTransformStart", [_pos.center, scale, rotation]);
 
                                 _first = false;
                             }
 
-                            triggerEvent("onTransform", [center, scale, rotation]);
+                            triggerEvent("onTransform", [_pos.center, scale, rotation]);
                         }
 
                         ev.preventDefault();
@@ -298,6 +298,8 @@ function Hammer(element, options) {
             case 'touchend':
                 if (_gesture == 'drag') {
                     triggerEvent("onDragEnd", [_direction, _distance, _angle]);
+                } else if (_gesture == 'transform') {
+                    triggerEvent("onTransformEnd", [_pos.center, ev.originalEvent.scale, ev.originalEvent.rotation]);
                 } else {
                     // compara o tipo de gesto pelo tempo
                     var now = new Date().getTime();
@@ -311,7 +313,7 @@ function Hammer(element, options) {
 
                             _prev_tap_end_time = null;
 
-                            triggerEvent("onDoubleTap");
+                            triggerEvent("onDoubleTap", [_pos.start]);
 
                             ev.preventDefault();
                         }
@@ -323,7 +325,7 @@ function Hammer(element, options) {
                             _prev_tap_end_time = now;
 
                             if (options.tap) {
-                                triggerEvent("onTap");
+                                triggerEvent("onTap", [_pos.start]);
 
                                 ev.preventDefault();
                             }
